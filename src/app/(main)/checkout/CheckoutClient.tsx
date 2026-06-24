@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   CheckCircle2, Tag, CreditCard, Smartphone, Wallet, ChevronRight,
   Scissors, Calendar, Clock, User, Building2, Loader2, Download,
-  Sparkles, MapPin, QrCode, Banknote,
+  Banknote, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,26 +15,32 @@ import { useAuth } from "@/lib/auth/useAuth";
 import { buildPrintHTML, type ReceiptBooking, QRImage } from "@/components/booking/BookingReceipt";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import UpiPaymentModal from "@/components/shared/UpiPaymentModal";
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
 
 const VALID_COUPONS: Record<string, { type: "pct" | "fixed"; value: number }> = {
-  MONDAY20: { type: "pct", value: 20 },
-  FIRST15: { type: "pct", value: 15 },
+  MONDAY20:  { type: "pct",   value: 20   },
+  FIRST15:   { type: "pct",   value: 15   },
   BRIDE2024: { type: "fixed", value: 2000 },
-  GLAMHUB10: { type: "pct", value: 10 },
+  GLAMHUB10: { type: "pct",   value: 10   },
 };
 
 const PAYMENT_METHODS = [
-  { id: "upi",          label: "UPI",               icon: Smartphone, desc: "Pay via any UPI app" },
-  { id: "card",         label: "Credit / Debit Card",icon: CreditCard,  desc: "Visa, Mastercard, RuPay" },
-  { id: "wallet",       label: "GlamHub Wallet",     icon: Wallet,      desc: "Balance: ₹0" },
-  { id: "cash_in_hand", label: "Cash in Hand",        icon: Banknote,    desc: "Pay directly at the salon" },
+  { id: "upi",          label: "UPI",                icon: Smartphone, desc: "GPay, PhonePe, Paytm, BHIM & more" },
+  { id: "card",         label: "Credit / Debit Card", icon: CreditCard,  desc: "Pay via UPI after QR scan" },
+  { id: "wallet",       label: "GlamHub Wallet",      icon: Wallet,      desc: "Use your wallet balance" },
+  { id: "cash_in_hand", label: "Cash in Hand",         icon: Banknote,    desc: "Pay directly at the salon" },
 ];
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function CheckoutClient() {
   const { profile, isSalonOwner } = useAuth();
   const params = useSearchParams();
   const router = useRouter();
 
+  // Redirect salon owners
   useEffect(() => {
     if (profile && isSalonOwner) {
       toast.error("Salon owners are not allowed to book appointments.");
@@ -42,89 +48,170 @@ export default function CheckoutClient() {
     }
   }, [profile, isSalonOwner, router]);
 
-  const bookingId = params.get("bookingId") ?? "";
-  const salonId = params.get("salonId") ?? "";
-  const serviceId = params.get("serviceId") ?? "";
-  const staffId = params.get("staffId") ?? "";
-  const salonName = params.get("salonName") ?? "Salon";
+  // URL params
+  const salonId     = params.get("salonId")     ?? "";
+  const serviceId   = params.get("serviceId")   ?? "";
+  const staffId     = params.get("staffId")     ?? "";
+  const salonName   = params.get("salonName")   ?? "Salon";
   const serviceName = params.get("serviceName") ?? "Service";
-  const price = Number(params.get("price") ?? 0);
-  const date = params.get("date") ?? "";
-  const time = params.get("time") ?? "";
-  const staffName = params.get("staffName") ?? "Any available";
+  const price       = Number(params.get("price") ?? 0);
+  const date        = params.get("date")        ?? "";
+  const time        = params.get("time")        ?? "";
+  const staffName   = params.get("staffName")   ?? "Any available";
 
+  // State
   const [coupon, setCoupon] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; type: "pct" | "fixed"; value: number } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string; type: "pct" | "fixed"; value: number;
+  } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("upi");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [createdBookingId, setCreatedBookingId] = useState("");
   const [createdBooking, setCreatedBooking] = useState<any>(null);
 
+  // UPI modal state
+  const [showUpiModal, setShowUpiModal] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState("");
+  const [upiAmount, setUpiAmount] = useState(0);
+
+  // Pricing
   const discount = appliedCoupon
     ? appliedCoupon.type === "pct"
       ? Math.round((price * appliedCoupon.value) / 100)
       : Math.min(appliedCoupon.value, price)
     : 0;
-
   const taxes = Math.round((price - discount) * 0.05);
   const total = price - discount + taxes;
 
+  const isCash = paymentMethod === "cash_in_hand";
+
+  // ─── Coupon ──────────────────────────────────────────────────────────────────
   const applyCoupon = () => {
     const code = coupon.trim().toUpperCase();
     const found = VALID_COUPONS[code];
     if (found) {
       setAppliedCoupon({ code, ...found });
-      toast.success(`Coupon "${code}" applied! You save ${found.type === "pct" ? found.value + "%" : formatPrice(found.value)}`);
+      toast.success(
+        `Coupon "${code}" applied! You save ${found.type === "pct" ? found.value + "%" : formatPrice(found.value)}`
+      );
     } else {
       toast.error("Invalid or expired coupon code");
     }
   };
 
-  const isCash = paymentMethod === "cash_in_hand";
-
-  const handlePay = async () => {
+  // ─── Cash booking (direct, no UPI) ───────────────────────────────────────────
+  const handleCashBooking = async () => {
     setIsProcessing(true);
     try {
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          salonId,
-          serviceId,
+          salonId, serviceId,
           staffId: staffId || null,
-          date,
-          timeSlot: time,
+          date, timeSlot: time,
           couponCode: appliedCoupon?.code || null,
-          paymentMethod,
-          // Cash bookings stay pending until salon scans QR
-          paymentStatus: isCash ? "pending" : "paid",
-          paymentId: isCash ? null : "pay_" + Math.random().toString(36).substring(2, 11).toUpperCase(),
+          paymentMethod: "cash_in_hand",
+          paymentStatus: "pending",
+          paymentId: null,
         }),
       });
-
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to create booking");
-      }
-
+      if (!res.ok) throw new Error(data.error || "Failed to create booking");
       setCreatedBooking(data.booking);
-      setCreatedBookingId(data.booking.booking_id);
       setIsSuccess(true);
-      toast.success(isCash ? "Booking confirmed! Pay at the salon 💵" : "Booking confirmed successfully!");
+      toast.success("Booking confirmed! Pay at the salon 💵");
     } catch (err: any) {
-      console.error(err);
       toast.error(err.message || "Failed to complete booking. Please try again.");
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // ─── UPI / Online payment flow ────────────────────────────────────────────────
+  const handleOnlinePayment = async () => {
+    setIsProcessing(true);
+    try {
+      // Step 1: Create order
+      const res = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: total,
+          type: "booking",
+          description: `${serviceName} @ ${salonName}`,
+          metadata: {
+            salonId, serviceId,
+            staffId: staffId || null,
+            date,
+            timeSlot: time,
+            couponCode: appliedCoupon?.code || null,
+            paymentMethod,
+          },
+        }),
+      });
+      const orderData = await res.json();
+      if (!res.ok) throw new Error(orderData.error || "Failed to create payment order");
+
+      // Step 2: Show UPI modal
+      setCurrentOrderId(orderData.orderId);
+      setUpiAmount(total);
+      setShowUpiModal(true);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to initiate payment. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ─── Handle UTR Submission ────────────────────────────────────────────────────
+  const handleUtrSubmit = async (utrNumber: string) => {
+    setIsVerifying(true);
+    try {
+      const res = await fetch("/api/payment/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: currentOrderId,
+          utrNumber,
+          type: "booking",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Payment verification failed");
+
+      setShowUpiModal(false);
+      setCreatedBooking(data.booking);
+      setIsSuccess(true);
+
+      const pts = data.pointsEarned ?? 0;
+      toast.success(
+        pts > 0
+          ? `✅ Booking confirmed! +${pts} GlamPoints earned 🌟`
+          : "✅ Booking confirmed!"
+      );
+    } catch (err: any) {
+      toast.error(err.message || "Verification failed. Please try again.");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  // ─── Main Pay Handler ─────────────────────────────────────────────────────────
+  const handlePay = () => {
+    if (isCash) {
+      handleCashBooking();
+    } else {
+      handleOnlinePayment();
+    }
+  };
+
+  // ─── Download Receipt ─────────────────────────────────────────────────────────
   const downloadReceipt = async () => {
     if (!createdBooking) return;
     setIsProcessing(true);
     try {
-      // Find the loaded base64 QR code image from the success page screen
       const qrImg = document.querySelector('img[alt="Booking QR Code"]') as HTMLImageElement;
       const qrUrl = qrImg ? qrImg.src : "";
 
@@ -160,15 +247,8 @@ export default function CheckoutClient() {
           city: "Mumbai",
           phone: "+91 98765 00000",
         },
-        service: {
-          name: serviceName,
-          category: "Hair",
-          duration: 30,
-        },
-        staff: {
-          name: staffName,
-          role: "Stylist",
-        },
+        service: { name: serviceName, category: "Hair", duration: 30 },
+        staff: { name: staffName, role: "Stylist" },
       };
 
       const htmlContent = buildPrintHTML({
@@ -179,13 +259,8 @@ export default function CheckoutClient() {
         qrUrl,
       });
 
-      // Create a temporary hidden iframe to render the standard hex styled HTML
       const iframe = document.createElement("iframe");
-      iframe.style.position = "absolute";
-      iframe.style.width = "480px";
-      iframe.style.height = "1000px";
-      iframe.style.left = "-9999px";
-      iframe.style.top = "-9999px";
+      iframe.style.cssText = "position:absolute;width:480px;height:1000px;left:-9999px;top:-9999px;";
       document.body.appendChild(iframe);
 
       const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
@@ -195,38 +270,27 @@ export default function CheckoutClient() {
       iframeDoc.write(htmlContent);
       iframeDoc.close();
 
-      // Wait for image loading
       await new Promise((resolve) => {
         const checkLoaded = () => {
           const imgs = iframeDoc.querySelectorAll("img");
-          let loadedCount = 0;
-          if (imgs.length === 0) {
-            resolve(true);
-            return;
-          }
+          let loaded = 0;
+          if (!imgs.length) { resolve(true); return; }
           imgs.forEach((img) => {
-            if (img.complete) {
-              loadedCount++;
-            } else {
-              img.addEventListener("load", () => {
-                loadedCount++;
-                if (loadedCount === imgs.length) resolve(true);
-              });
-              img.addEventListener("error", () => {
-                loadedCount++;
-                if (loadedCount === imgs.length) resolve(true);
-              });
+            if (img.complete) { loaded++; }
+            else {
+              img.addEventListener("load", () => { if (++loaded === imgs.length) resolve(true); });
+              img.addEventListener("error", () => { if (++loaded === imgs.length) resolve(true); });
             }
           });
-          if (loadedCount === imgs.length) resolve(true);
+          if (loaded === imgs.length) resolve(true);
         };
-        setTimeout(checkLoaded, 150);
+        setTimeout(checkLoaded, 200);
       });
 
-      const receiptElement = iframeDoc.querySelector(".receipt") as HTMLElement;
-      if (!receiptElement) throw new Error("Receipt element not found in iframe");
+      const receiptEl = iframeDoc.querySelector(".receipt") as HTMLElement;
+      if (!receiptEl) throw new Error("Receipt element not found");
 
-      const canvas = await html2canvas(receiptElement, {
+      const canvas = await html2canvas(receiptEl, {
         scale: 2.5,
         useCORS: true,
         allowTaint: false,
@@ -236,17 +300,12 @@ export default function CheckoutClient() {
       document.body.removeChild(iframe);
 
       const imgData = canvas.toDataURL("image/jpeg", 1.0);
-      
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "px",
         format: [canvas.width / 2.5, canvas.height / 2.5],
       });
-      
-      const width = pdf.internal.pageSize.getWidth();
-      const height = pdf.internal.pageSize.getHeight();
-      
-      pdf.addImage(imgData, "JPEG", 0, 0, width, height);
+      pdf.addImage(imgData, "JPEG", 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
       pdf.save(`CuraStyl-Receipt-${createdBooking.booking_id}.pdf`);
       toast.success("Receipt downloaded as PDF!");
     } catch (err: any) {
@@ -257,8 +316,9 @@ export default function CheckoutClient() {
     }
   };
 
-  if (isSuccess) {
-    const qrPayload = createdBooking ? JSON.stringify({
+  // ─── Success Screen ───────────────────────────────────────────────────────────
+  if (isSuccess && createdBooking) {
+    const qrPayload = JSON.stringify({
       bookingId: createdBooking.booking_id,
       salonId: salonName,
       service: serviceName,
@@ -266,82 +326,86 @@ export default function CheckoutClient() {
       time: createdBooking.time_slot,
       amount: createdBooking.final_amount,
       paymentStatus: createdBooking.payment_status,
-    }) : "";
-
-    const pointsEarned = createdBooking ? Math.floor(createdBooking.final_amount / 100) * 10 : 0;
-    const bookingDateFmt = createdBooking ? new Date(createdBooking.booking_date + "T00:00:00").toLocaleDateString("en-IN", {
-      weekday: "long", day: "numeric", month: "long", year: "numeric",
-    }) : "";
-    const createdFmt = createdBooking ? new Date(createdBooking.created_at).toLocaleString("en-IN", {
-      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
-    }) : "";
-    const qrUrl = createdBooking ? `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrPayload)}&ecc=M&format=png&color=7c3aed&bgcolor=ffffff` : "";
+    });
+    const pointsEarned = Math.floor(createdBooking.final_amount / 100) * 10;
 
     return (
       <div className="min-h-screen gradient-hero pt-24 pb-16 flex items-center justify-center px-4">
         <div className="text-center max-w-md w-full">
+          {/* Success Icon */}
           <div className="relative w-20 h-20 mx-auto mb-5">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/40 flex items-center justify-center animate-glow">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/40 flex items-center justify-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-400" />
             </div>
             <div className="absolute -inset-1.5 rounded-full border border-emerald-500/20 animate-ping opacity-30" />
           </div>
 
-          <h1 className="text-3xl font-bold text-white mb-2 font-display">Booking Confirmed!</h1>
-          
+          <h1 className="text-3xl font-bold text-white mb-2 font-display">
+            {isCash ? "Booking Confirmed! 🎉" : "Payment Received! 🎉"}
+          </h1>
+
           <div className="flex justify-center mb-5">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Status: Active &amp; Confirmed (Paid)
+              {isCash ? "Awaiting payment at salon" : "Confirmed & Paid"}
             </span>
           </div>
 
-          {createdBooking && (
-            <div className="glass-card p-5 mb-5 inline-block mx-auto w-auto">
-              <QRImage data={qrPayload} size={160} className="shadow-purple-500/10" />
-              <p className="text-white/40 text-[10px] mt-2 max-w-[200px] mx-auto leading-tight">📱 Present this QR at the salon for verification</p>
+          {/* QR Code */}
+          <div className="glass-card p-5 mb-5 inline-block mx-auto">
+            <QRImage data={qrPayload} size={160} className="shadow-purple-500/10" />
+            <p className="text-white/40 text-[10px] mt-2 max-w-[200px] mx-auto leading-tight">
+              📱 Present this QR at the salon for check-in
+            </p>
+          </div>
+
+          {/* GlamPoints earned */}
+          {pointsEarned > 0 && !isCash && (
+            <div className="mb-5 flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 mx-auto w-fit">
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-semibold text-purple-300">
+                +{pointsEarned} GlamPoints earned!
+              </span>
             </div>
           )}
 
+          {/* Summary */}
           <div className="glass-card p-6 text-left space-y-3 mb-6">
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Booking ID</span>
-              <span className="text-purple-300 font-mono font-bold">{createdBookingId || bookingId}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Salon</span>
-              <span className="text-white font-medium">{salonName}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Service</span>
-              <span className="text-white">{serviceName}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Date &amp; Time</span>
-              <span className="text-white">{new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} at {time}</span>
-            </div>
+            {[
+              { label: "Booking ID", value: createdBooking.booking_id, mono: true, highlight: true },
+              { label: "Salon", value: salonName },
+              { label: "Service", value: serviceName },
+              { label: "Date & Time", value: `${new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} at ${time}` },
+              { label: "Payment", value: isCash ? "💵 Cash (Pay at Salon)" : `✅ UPI Paid` },
+            ].map(({ label, value, mono, highlight }) => (
+              <div key={label} className="flex justify-between text-sm">
+                <span className="text-white/40">{label}</span>
+                <span className={cn("font-medium", mono && "font-mono", highlight ? "text-purple-300 font-bold" : "text-white")}>
+                  {value}
+                </span>
+              </div>
+            ))}
             <div className="border-t border-white/10 pt-3 flex justify-between">
-              <span className="text-white/60 font-medium">Amount Paid</span>
-              <span className="text-xl font-bold gradient-text">{formatPrice(total)}</span>
+              <span className="text-white/60 font-medium">
+                {isCash ? "Amount Due" : "Amount Paid"}
+              </span>
+              <span className="text-xl font-bold gradient-text">
+                {formatPrice(createdBooking.final_amount)}
+              </span>
             </div>
           </div>
 
+          {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
               onClick={downloadReceipt}
               disabled={isProcessing}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg shadow-purple-500/20 gap-2 shrink-0"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 shadow-lg shadow-purple-500/20 gap-2"
             >
               {isProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating PDF…
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
               ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  Download Receipt (PDF)
-                </>
+                <>📄 Download Receipt (PDF)</>
               )}
             </Button>
             <Button
@@ -349,7 +413,7 @@ export default function CheckoutClient() {
               onClick={() => router.push("/dashboard/bookings")}
               className="border-white/10 hover:bg-white/5 hover:text-white"
             >
-              View My Bookings
+              My Bookings
             </Button>
             <Button
               variant="ghost"
@@ -360,194 +424,235 @@ export default function CheckoutClient() {
             </Button>
           </div>
         </div>
-
       </div>
     );
   }
 
+  // ─── Checkout Form ────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen gradient-hero pt-20 pb-16">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-white mb-8">Complete Your Booking</h1>
+    <>
+      <div className="min-h-screen gradient-hero pt-20 pb-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h1 className="text-2xl font-bold text-white mb-8">
+            Complete Your Booking
+          </h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-          {/* Left: Payment */}
-          <div className="md:col-span-3 space-y-5">
-            {/* Coupon */}
-            <div className="glass-card p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Tag className="w-4 h-4 text-purple-400" />
-                <h2 className="font-semibold text-white">Promo Code</h2>
-              </div>
-              {appliedCoupon ? (
-                <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="font-mono font-bold text-emerald-300">{appliedCoupon.code}</span>
-                    <span className="text-emerald-400 text-sm">applied</span>
-                  </div>
-                  <button
-                    onClick={() => setAppliedCoupon(null)}
-                    className="text-xs text-white/40 hover:text-white transition-colors"
-                  >
-                    Remove
-                  </button>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+            {/* Left: Payment Options */}
+            <div className="md:col-span-3 space-y-5">
+
+              {/* Coupon */}
+              <div className="glass-card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Tag className="w-4 h-4 text-purple-400" />
+                  <h2 className="font-semibold text-white">Promo Code</h2>
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter promo code (try FIRST15)"
-                    value={coupon}
-                    onChange={(e) => setCoupon(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === "Enter" && applyCoupon()}
-                    className="font-mono uppercase"
-                  />
-                  <Button onClick={applyCoupon} variant="outline" className="shrink-0">Apply</Button>
+                {appliedCoupon ? (
+                  <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span className="font-mono font-bold text-emerald-300">{appliedCoupon.code}</span>
+                      <span className="text-emerald-400 text-sm">applied</span>
+                    </div>
+                    <button
+                      onClick={() => setAppliedCoupon(null)}
+                      className="text-xs text-white/40 hover:text-white transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter promo code (try FIRST15)"
+                      value={coupon}
+                      onChange={(e) => setCoupon(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === "Enter" && applyCoupon()}
+                      className="font-mono uppercase"
+                    />
+                    <Button onClick={applyCoupon} variant="outline" className="shrink-0">
+                      Apply
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Methods */}
+              <div className="glass-card p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="w-4 h-4 text-purple-400" />
+                  <h2 className="font-semibold text-white">Payment Method</h2>
+                </div>
+                <div className="space-y-2">
+                  {PAYMENT_METHODS.map(({ id, label, icon: Icon, desc }) => (
+                    <button
+                      key={id}
+                      onClick={() => setPaymentMethod(id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all duration-200 text-left",
+                        paymentMethod === id
+                          ? "border-purple-400/60 bg-purple-500/10"
+                          : "border-white/10 bg-white/3 hover:border-purple-500/30"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                        paymentMethod === id ? "bg-purple-500/20" : "bg-white/5"
+                      )}>
+                        <Icon className={cn("w-5 h-5", paymentMethod === id ? "text-purple-400" : "text-white/40")} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-white text-sm">{label}</p>
+                        <p className="text-xs text-white/40">{desc}</p>
+                      </div>
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 shrink-0",
+                        paymentMethod === id ? "border-purple-400 bg-purple-400" : "border-white/20"
+                      )} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Online payment info */}
+              {!isCash && (
+                <div className="glass-card p-5 border border-purple-500/20 bg-purple-500/5">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/20 flex items-center justify-center shrink-0">
+                      <Smartphone className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-purple-300 text-sm">Secure UPI Payment</p>
+                      <p className="text-xs text-purple-400/70 mt-1 leading-relaxed">
+                        You&apos;ll be shown a QR code to scan with GPay, PhonePe, Paytm, or BHIM.
+                        After paying, enter your UTR number to confirm the booking instantly.
+                      </p>
+                      <div className="mt-2 flex items-center gap-1.5 text-xs text-purple-400/60">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>GlamPoints earned on every payment</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Cash info */}
+              {isCash && (
+                <div className="glass-card p-5 border border-emerald-500/25 bg-emerald-500/5">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+                      <Banknote className="w-5 h-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-emerald-300 text-sm">Pay at the Salon</p>
+                      <p className="text-xs text-emerald-400/70 mt-1 leading-relaxed">
+                        Show your <strong>QR code</strong> to the salon staff when you arrive and pay in cash on the spot.
+                        GlamPoints are awarded when the salon scans your QR.
+                      </p>
+                      <div className="mt-2 flex flex-col gap-1">
+                        {["Booking confirmed immediately", "QR code sent to notifications", "GlamPoints on arrival"].map((t) => (
+                          <div key={t} className="flex items-center gap-2 text-xs text-emerald-400/60">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{t}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Payment Methods */}
-            <div className="glass-card p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <CreditCard className="w-4 h-4 text-purple-400" />
-                <h2 className="font-semibold text-white">Payment Method</h2>
-              </div>
-              <div className="space-y-2">
-                {PAYMENT_METHODS.map(({ id, label, icon: Icon, desc }) => (
-                  <button
-                    key={id}
-                    onClick={() => setPaymentMethod(id)}
-                    className={cn(
-                      "w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all duration-200 text-left",
-                      paymentMethod === id
-                        ? "border-purple-400/60 bg-purple-500/10"
-                        : "border-white/10 bg-white/3 hover:border-purple-500/30"
-                    )}
-                  >
-                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", paymentMethod === id ? "bg-purple-500/20" : "bg-white/5")}>
-                      <Icon className={cn("w-5 h-5", paymentMethod === id ? "text-purple-400" : "text-white/40")} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-white text-sm">{label}</p>
-                      <p className="text-xs text-white/40">{desc}</p>
-                    </div>
-                    <div className={cn("w-4 h-4 rounded-full border-2 shrink-0", paymentMethod === id ? "border-purple-400 bg-purple-400" : "border-white/20")} />
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Right: Order Summary */}
+            <div className="md:col-span-2">
+              <div className="glass-dark rounded-2xl border border-purple-500/20 p-5 sticky top-24">
+                <h2 className="font-semibold text-white mb-4">Order Summary</h2>
 
-            {/* UPI field */}
-            {paymentMethod === "upi" && (
-              <div className="glass-card p-5">
-                <label className="block text-sm text-white/60 mb-2">UPI ID</label>
-                <Input placeholder="yourname@upi" />
-                <p className="text-xs text-white/30 mt-2">We&apos;ll send a payment request to your UPI app</p>
-              </div>
-            )}
+                <div className="space-y-3 mb-5">
+                  {[
+                    { icon: Building2, label: "Salon",   value: salonName },
+                    { icon: Scissors,  label: "Service", value: serviceName },
+                    { icon: User,      label: "Stylist", value: staffName },
+                    { icon: Calendar,  label: "Date",    value: date ? new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "" },
+                    { icon: Clock,     label: "Time",    value: time },
+                  ].map(({ icon: Icon, label, value }) => (
+                    <div key={label} className="flex items-center gap-2.5 text-sm">
+                      <Icon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <span className="text-white/40 w-16 shrink-0">{label}</span>
+                      <span className="text-white/80 font-medium truncate">{value}</span>
+                    </div>
+                  ))}
+                </div>
 
-            {/* Cash in Hand info banner */}
-            {paymentMethod === "cash_in_hand" && (
-              <div className="glass-card p-5 border border-emerald-500/25 bg-emerald-500/5">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <Banknote className="w-5 h-5 text-emerald-400" />
+                <div className="border-t border-white/10 pt-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-white/50">Service price</span>
+                    <span className="text-white">{formatPrice(price)}</span>
                   </div>
-                  <div>
-                    <p className="font-medium text-emerald-300 text-sm">Pay at the Salon</p>
-                    <p className="text-xs text-emerald-400/70 mt-1 leading-relaxed">
-                      No online payment needed right now. Simply show your <strong>QR code</strong> to the salon staff when you arrive, and pay in cash on the spot. Your booking is instantly confirmed!
-                    </p>
-                    <div className="mt-3 flex items-center gap-2 text-xs text-emerald-400/60">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Booking confirmed immediately</span>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-emerald-400">
+                      <span>Promo discount</span>
+                      <span>-{formatPrice(discount)}</span>
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-emerald-400/60">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>QR code sent to your notifications</span>
-                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-white/50">GST (5%)</span>
+                    <span className="text-white">{formatPrice(taxes)}</span>
+                  </div>
+                  <div className="border-t border-white/10 pt-2 flex justify-between font-semibold text-base">
+                    <span className="text-white">Total</span>
+                    <span className="gradient-text text-xl">{formatPrice(total)}</span>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
 
-          {/* Right: Summary */}
-          <div className="md:col-span-2">
-            <div className="glass-dark rounded-2xl border border-purple-500/20 p-5 sticky top-24">
-              <h2 className="font-semibold text-white mb-4">Order Summary</h2>
-
-              <div className="space-y-3 mb-5">
-                {[
-                  { icon: Building2, label: "Salon", value: salonName },
-                  { icon: Scissors, label: "Service", value: serviceName },
-                  { icon: User, label: "Stylist", value: staffName },
-                  { icon: Calendar, label: "Date", value: date ? new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "" },
-                  { icon: Clock, label: "Time", value: time },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-center gap-2.5 text-sm">
-                    <Icon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                    <span className="text-white/40 w-16 shrink-0">{label}</span>
-                    <span className="text-white/80 font-medium truncate">{value}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t border-white/10 pt-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-white/50">Service price</span>
-                  <span className="text-white">{formatPrice(price)}</span>
-                </div>
-                {discount > 0 && (
-                  <div className="flex justify-between text-emerald-400">
-                    <span>Promo discount</span>
-                    <span>-{formatPrice(discount)}</span>
+                {/* GlamPoints preview */}
+                {!isCash && (
+                  <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-purple-500/8 border border-purple-500/15">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                    <span className="text-xs text-purple-300">
+                      Earn +{Math.floor(total / 100) * 10} GlamPoints on payment
+                    </span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span className="text-white/50">GST (5%)</span>
-                  <span className="text-white">{formatPrice(taxes)}</span>
-                </div>
-                <div className="border-t border-white/10 pt-2 flex justify-between font-semibold text-base">
-                  <span className="text-white">Total</span>
-                  <span className="gradient-text text-xl">{formatPrice(total)}</span>
-                </div>
+
+                <Button
+                  onClick={handlePay}
+                  disabled={isProcessing}
+                  className={cn(
+                    "w-full h-12 mt-5 text-base font-semibold gap-2",
+                    isCash
+                      ? "bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-emerald-500/20"
+                      : ""
+                  )}
+                >
+                  {isProcessing ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" />Processing…</>
+                  ) : isCash ? (
+                    <><Banknote className="w-5 h-5" />Confirm Booking (Pay at Salon)</>
+                  ) : (
+                    <>Pay {formatPrice(total)}<ChevronRight className="w-5 h-5" /></>
+                  )}
+                </Button>
+
+                <p className="text-xs text-white/25 text-center mt-3">
+                  🔒 Secured by 256-bit SSL encryption
+                </p>
               </div>
-
-              <Button
-                onClick={handlePay}
-                disabled={isProcessing}
-                className={cn(
-                  "w-full h-12 mt-5 text-base font-semibold gap-2",
-                  isCash && "bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-emerald-500/20"
-                )}
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Confirming…
-                  </>
-                ) : isCash ? (
-                  <>
-                    <Banknote className="w-5 h-5" />
-                    Confirm Booking (Pay at Salon)
-                  </>
-                ) : (
-                  <>
-                    Pay {formatPrice(total)}
-                    <ChevronRight className="w-5 h-5" />
-                  </>
-                )}
-              </Button>
-
-              <p className="text-xs text-white/25 text-center mt-3">
-                🔒 Secured by 256-bit SSL encryption
-              </p>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* UPI Payment Modal */}
+      <UpiPaymentModal
+        open={showUpiModal}
+        onClose={() => setShowUpiModal(false)}
+        amount={upiAmount}
+        orderId={currentOrderId}
+        description={`${serviceName} @ ${salonName}`}
+        onSuccess={handleUtrSubmit}
+        isVerifying={isVerifying}
+      />
+    </>
   );
 }

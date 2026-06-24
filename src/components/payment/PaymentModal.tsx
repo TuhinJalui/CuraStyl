@@ -99,7 +99,7 @@ export default function PaymentModal({
 
       // Verify payment
       const result = await verifyPayment({
-        transaction_id: transactionId,
+        razorpay_payment_id: transactionId,
         razorpay_order_id: order,
         type,
         metadata: {

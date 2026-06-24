@@ -275,7 +275,7 @@ export async function POST(req: NextRequest) {
         await serviceSupabase.rpc("increment_total_spent", {
           p_user_id: user.id,
           p_amount: finalAmount,
-        }).maybeSingle(); // non-fatal if function doesn't exist yet
+        });
       } catch (pointsErr) {
         console.warn("GlamPoints award failed (non-fatal):", pointsErr);
       }

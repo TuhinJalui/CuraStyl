@@ -46,6 +46,7 @@ import SalonOwnerPreview from "@/components/salon/SalonOwnerPreview";
 import LocationPicker from "@/components/shared/LocationPicker";
 
 const QrScanner = dynamic(() => import("@/components/shared/QrScanner"), { ssr: false });
+import UpiPaymentModal from "@/components/shared/UpiPaymentModal";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,16 @@ export default function SalonOwnerDashboard() {
   const [planData, setPlanData] = useState<any>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [planUpgrading, setPlanUpgrading] = useState<string | null>(null);
+
+  // UPI Payment for plan upgrade
+  const [showPlanPayment, setShowPlanPayment] = useState(false);
+  const [planPaymentOrder, setPlanPaymentOrder] = useState("");
+  const [planPaymentAmount, setPlanPaymentAmount] = useState(0);
+  const [planPaymentTier, setPlanPaymentTier] = useState("");
+  const [isVerifyingPlan, setIsVerifyingPlan] = useState(false);
+
+  // Bookings filter
+  const [bookingFilter, setBookingFilter] = useState<"all" | "today">("today");
 
   const salonId = salonData?.id ?? null;
   const salonName = salonData?.name ?? "My Salon";
@@ -443,18 +454,64 @@ export default function SalonOwnerDashboard() {
     finally { setSalonSaving(false); }
   };
 
-  // ── Plan Upgrade ─────────────────────────────────────────────────────────────
+  // ── Plan Upgrade via UPI Payment ─────────────────────────────────────────────
   const handleUpgradePlan = async (tier: string) => {
+    const planPrices: Record<string, number> = { premium: 999, ultra: 2499 };
+    const price = planPrices[tier];
+    if (!price) { toast.error("Invalid plan"); return; }
+    if (!salonId) { toast.error("Salon not found"); return; }
+
     setPlanUpgrading(tier);
     try {
-      const res = await fetch("/api/salon-owner/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tier }) });
+      // Create payment order
+      const res = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: price,
+          type: "plan_upgrade",
+          description: `CuraStyl ${tier === "ultra" ? "Ultra Premium" : "Premium"} Plan`,
+          metadata: { salonId, tier },
+        }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      toast.success(data.message);
+      if (!res.ok) throw new Error(data.error || "Failed to create payment order");
+
+      setPlanPaymentOrder(data.orderId);
+      setPlanPaymentAmount(price);
+      setPlanPaymentTier(tier);
+      setShowPlanPayment(true);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to initiate payment");
+    } finally {
+      setPlanUpgrading(null);
+    }
+  };
+
+  const handlePlanUtrSubmit = async (utrNumber: string) => {
+    setIsVerifyingPlan(true);
+    try {
+      const res = await fetch("/api/payment/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: planPaymentOrder,
+          utrNumber,
+          type: "plan_upgrade",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Payment verification failed");
+
+      setShowPlanPayment(false);
+      toast.success(`🎉 ${data.planName} plan activated! Welcome to the next level!`);
       fetchPlan();
       fetchSalon();
-    } catch (err: any) { toast.error(err.message); }
-    finally { setPlanUpgrading(null); }
+    } catch (err: any) {
+      toast.error(err.message || "Verification failed. Please try again.");
+    } finally {
+      setIsVerifyingPlan(false);
+    }
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -462,6 +519,9 @@ export default function SalonOwnerDashboard() {
   const todayBookings = liveBookings.filter(b => b.booking_date === todayStr);
   const confirmedToday = todayBookings.filter(b => b.status === "confirmed" && !b.qr_verified);
   const verifiedToday = todayBookings.filter(b => b.qr_verified);
+  const totalRevenue = liveBookings.filter(b => b.status === "completed").reduce((s, b) => s + (b.final_amount || 0), 0);
+  const todayRevenue = todayBookings.filter(b => b.status === "completed").reduce((s, b) => s + (b.final_amount || 0), 0);
+  const displayedBookings = bookingFilter === "today" ? todayBookings : liveBookings;
   const currentPlan = (salonData?.plan_tier as keyof typeof PLAN_CONFIG) ?? "free";
   const planInfo = PLAN_CONFIG[currentPlan] ?? PLAN_CONFIG.free;
 
@@ -565,12 +625,13 @@ export default function SalonOwnerDashboard() {
             {/* ══ OVERVIEW ═══════════════════════════════════════════════════ */}
             {activeTab === "overview" && (
               <div className="space-y-6">
+                {/* Stats grid */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[
-                    { label: "Today's Revenue", value: `₹${todayBookings.filter(b => b.status === "completed").reduce((s, b) => s + (b.final_amount || 0), 0).toLocaleString("en-IN")}`, change: "Live", icon: IndianRupee, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-                    { label: "Bookings Today", value: String(todayBookings.length), change: `${verifiedToday.length} verified`, icon: Calendar, color: "text-purple-400", bg: "bg-purple-500/10" },
-                    { label: "Avg Rating", value: "4.8", change: "+0.1", icon: Star, color: "text-amber-400", bg: "bg-amber-500/10" },
-                    { label: "Monthly Revenue", value: `₹${liveBookings.filter(b => b.status === "completed").reduce((s, b) => s + (b.final_amount || 0), 0).toLocaleString("en-IN")}`, change: "This month", icon: TrendingUp, color: "text-pink-400", bg: "bg-pink-500/10" },
+                    { label: "Today's Revenue",  value: `₹${todayRevenue.toLocaleString("en-IN")}`,           change: "Live today",               icon: IndianRupee, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+                    { label: "Today's Bookings", value: String(todayBookings.length),                          change: `${verifiedToday.length} verified`, icon: Calendar,    color: "text-purple-400", bg: "bg-purple-500/10" },
+                    { label: "Total Bookings",   value: String(liveBookings.length),                           change: `${liveBookings.filter(b => b.status === "completed").length} completed`, icon: TrendingUp,  color: "text-pink-400",   bg: "bg-pink-500/10" },
+                    { label: "Total Revenue",    value: `₹${totalRevenue.toLocaleString("en-IN")}`,            change: "All time",                icon: Star,        color: "text-amber-400", bg: "bg-amber-500/10" },
                   ].map(({ label, value, change, icon: Icon, color, bg }) => (
                     <div key={label} className="glass-card p-5">
                       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-3", bg)}>
@@ -582,19 +643,34 @@ export default function SalonOwnerDashboard() {
                     </div>
                   ))}
                 </div>
-                {/* Today's Bookings */}
+
+                {/* Bookings list with Today / All toggle */}
                 <div className="glass-card p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-semibold text-white">Today's Bookings</h2>
+                  <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-semibold text-white">Bookings</h2>
+                      <div className="flex gap-1 p-0.5 bg-white/5 border border-white/10 rounded-lg">
+                        {(["today", "all"] as const).map(f => (
+                          <button key={f} onClick={() => setBookingFilter(f)}
+                            className={cn("px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                              bookingFilter === f ? "bg-purple-500/30 text-purple-300" : "text-white/40 hover:text-white"
+                            )}>
+                            {f === "today" ? `Today (${todayBookings.length})` : `All (${liveBookings.length})`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <button onClick={fetchLiveBookings} className="text-xs text-purple-400 hover:text-purple-300">↻ Refresh</button>
                   </div>
                   {bookingsLoading ? (
                     <div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" /></div>
-                  ) : todayBookings.length === 0 ? (
-                    <p className="text-center py-6 text-white/30 text-sm">No bookings for today yet.</p>
+                  ) : displayedBookings.length === 0 ? (
+                    <p className="text-center py-6 text-white/30 text-sm">
+                      {bookingFilter === "today" ? "No bookings for today yet." : "No bookings found."}
+                    </p>
                   ) : (
                     <div className="space-y-3">
-                      {todayBookings.slice(0, 6).map((b) => {
+                      {displayedBookings.slice(0, 8).map((b) => {
                         const user = b.user as any; const svc = b.service as any; const stf = b.staff as any;
                         return (
                           <div key={b.id} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
@@ -604,7 +680,7 @@ export default function SalonOwnerDashboard() {
                               </div>
                               <div>
                                 <p className="font-medium text-white text-sm">{user?.full_name ?? "Unknown"}</p>
-                                <p className="text-xs text-white/40">{svc?.name} • {b.time_slot}{stf ? ` • ${stf.name}` : ""}</p>
+                                <p className="text-xs text-white/40">{svc?.name} • {b.booking_date} {b.time_slot}{stf ? ` • ${stf.name}` : ""}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -615,6 +691,11 @@ export default function SalonOwnerDashboard() {
                           </div>
                         );
                       })}
+                      {displayedBookings.length > 8 && (
+                        <p className="text-center text-xs text-white/30 pt-2">
+                          +{displayedBookings.length - 8} more bookings • Go to Bookings tab to see all
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -624,17 +705,31 @@ export default function SalonOwnerDashboard() {
             {/* ══ BOOKINGS ═══════════════════════════════════════════════════ */}
             {activeTab === "bookings" && (
               <div className="glass-card overflow-hidden">
-                <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                  <h2 className="font-semibold text-white">Upcoming Bookings</h2>
+                <div className="p-4 border-b border-white/10 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <h2 className="font-semibold text-white">All Bookings</h2>
+                    <div className="flex gap-1 p-0.5 bg-white/5 border border-white/10 rounded-lg">
+                      {(["today", "all"] as const).map(f => (
+                        <button key={f} onClick={() => setBookingFilter(f)}
+                          className={cn("px-2.5 py-1 rounded-md text-xs font-medium transition-all",
+                            bookingFilter === f ? "bg-purple-500/30 text-purple-300" : "text-white/40 hover:text-white"
+                          )}>
+                          {f === "today" ? `Today (${todayBookings.length})` : `All (${liveBookings.length})`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button onClick={fetchLiveBookings} className="text-xs text-purple-400 hover:text-purple-300">↻ Refresh</button>
                 </div>
                 {bookingsLoading ? (
                   <div className="flex items-center justify-center py-10"><div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" /></div>
-                ) : liveBookings.length === 0 ? (
-                  <p className="text-center py-10 text-white/30 text-sm">No upcoming bookings found.</p>
+                ) : displayedBookings.length === 0 ? (
+                  <p className="text-center py-10 text-white/30 text-sm">
+                    {bookingFilter === "today" ? "No bookings for today yet." : "No bookings found."}
+                  </p>
                 ) : (
                   <div className="divide-y divide-white/5">
-                    {liveBookings.map((b) => {
+                    {displayedBookings.map((b) => {
                       const user = b.user as any; const svc = b.service as any; const stf = b.staff as any;
                       return (
                         <div key={b.id} className="flex items-center gap-3 p-4 hover:bg-white/3 transition-colors flex-wrap">
@@ -1128,7 +1223,9 @@ export default function SalonOwnerDashboard() {
                             onClick={() => handleUpgradePlan(tier)}
                             disabled={planUpgrading === tier}
                           >
-                            {planUpgrading === tier ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Upgrading…</> : <><Zap className="w-4 h-4" />Upgrade to {plan.name}</>}
+                            {planUpgrading === tier
+                              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Creating order…</>
+                              : <><Zap className="w-4 h-4" />Upgrade to {plan.name} — ₹{plan.price}/mo</>}
                           </Button>
                         )}
                         {isCurrent && (
@@ -1150,6 +1247,17 @@ export default function SalonOwnerDashboard() {
           </div>
         </main>
       </div>
+
+      {/* UPI Plan Payment Modal */}
+      <UpiPaymentModal
+        open={showPlanPayment}
+        onClose={() => setShowPlanPayment(false)}
+        amount={planPaymentAmount}
+        orderId={planPaymentOrder}
+        description={`CuraStyl ${planPaymentTier === "ultra" ? "Ultra Premium" : "Premium"} Plan`}
+        onSuccess={handlePlanUtrSubmit}
+        isVerifying={isVerifyingPlan}
+      />
 
       {/* QR Scanner Modal */}
       {showScanner && <QrScanner onScan={handleQrScan} onClose={() => setShowScanner(false)} />}
