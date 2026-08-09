@@ -1,0 +1,83 @@
+════════════════════════════════════════════════
+  🎯 SIMPLE FIX - DO EXACTLY THIS
+════════════════════════════════════════════════
+
+YOU RAN THE WRONG FILES!
+The files you ran only CHECK the database.
+They DON'T CREATE the missing tables.
+
+════════════════════════════════════════════════
+
+STEP 1: Run This SQL File
+────────────────────────────────────────────────
+File: supabase/PAYMENTS_MIGRATION.sql
+
+How:
+1. Open Supabase: https://supabase.com/dashboard
+2. Click "SQL Editor"
+3. Open PAYMENTS_MIGRATION.sql in VS Code
+4. Copy everything
+5. Paste in Supabase
+6. Click RUN
+
+════════════════════════════════════════════════
+
+STEP 2: Run This SQL File
+────────────────────────────────────────────────
+File: supabase/FIX_GLAMPOINTS_AND_PLANS.sql
+
+How:
+1. Stay in Supabase SQL Editor
+2. Open FIX_GLAMPOINTS_AND_PLANS.sql in VS Code
+3. Copy everything
+4. Paste in Supabase
+5. Click RUN
+
+════════════════════════════════════════════════
+
+STEP 3: Check Your Terminal
+────────────────────────────────────────────────
+Look at the terminal where "npm run dev" is running.
+
+You should see NEW detailed logs like:
+[SalonPlan] ===== START =====
+[SalonPlan] Supabase client created
+[SalonPlan] Auth check: ...
+
+If you see:
+[SalonPlan] ===== UNEXPECTED ERROR =====
+
+Copy ALL those error lines and share them!
+
+════════════════════════════════════════════════
+
+STEP 4: Test Upgrade Button Again
+────────────────────────────────────────────────
+1. Go to your app
+2. Refresh page (F5)
+3. Click Upgrade button
+4. Check terminal for logs
+5. Check browser console (F12)
+
+════════════════════════════════════════════════
+
+WHAT TO SHARE IF STILL BROKEN:
+────────────────────────────────────────────────
+From TERMINAL (where npm run dev runs):
+→ All lines with [SalonPlan]
+→ All lines with [PaymentOrder]
+→ Any ERROR lines
+
+From BROWSER CONSOLE (F12):
+→ All lines with [SalonOwner]
+→ Any red error messages
+
+════════════════════════════════════════════════
+
+TL;DR:
+1. Run PAYMENTS_MIGRATION.sql in Supabase ✅
+2. Run FIX_GLAMPOINTS_AND_PLANS.sql in Supabase ✅
+3. Try upgrade button ✅
+4. Share terminal logs if error ✅
+
+════════════════════════════════════════════════

@@ -1,0 +1,464 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0a0a0f;
+  --color-foreground: #f5f0ff;
+  --color-primary: #c084fc;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f0abfc;
+  --color-secondary-foreground: #0a0a0f;
+  --color-accent: #e879f9;
+  --color-muted: #1a1a2e;
+  --color-muted-foreground: #a0a0b0;
+  --color-border: rgba(192, 132, 252, 0.2);
+  --color-card: rgba(255, 255, 255, 0.03);
+  --color-card-foreground: #f5f0ff;
+  --color-destructive: #ef4444;
+  --color-rose: #fb7185;
+  --color-gold: #fbbf24;
+  --color-emerald: #34d399;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Playfair Display", serif;
+
+  --radius: 0.75rem;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--color-border);
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #0a0a0f;
+  color: #f5f0ff;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Glassmorphism utilities ── */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-dark {
+  background: rgba(10, 10, 20, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(192, 132, 252, 0.15);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(192, 132, 252, 0.15);
+  border-radius: 1rem;
+  transition: all 0.3s ease;
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(192, 132, 252, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 20px 60px rgba(192, 132, 252, 0.15);
+}
+
+/* ── Gradient text ── */
+.gradient-text {
+  background: linear-gradient(135deg, #c084fc 0%, #f0abfc 50%, #e879f9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Gradient backgrounds ── */
+.gradient-bg {
+  background: linear-gradient(135deg, #0a0a0f 0%, #1a0a2e 50%, #0a0a1f 100%);
+}
+
+.gradient-hero {
+  background: radial-gradient(
+      ellipse at 20% 40%,
+      rgba(192, 132, 252, 0.18) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 80% 60%,
+      rgba(232, 121, 249, 0.15) 0%,
+      transparent 60%
+    ),
+    linear-gradient(180deg, #0a0a0f 0%, #160627 50%, #0a0a0f 100%);
+}
+
+/* ── Button styles ── */
+.btn-primary {
+  background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%);
+  color: white;
+  border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(168, 85, 247, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+  box-shadow: 0 8px 30px rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  color: #c084fc;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background: rgba(192, 132, 252, 0.1);
+  border-color: #c084fc;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(192, 132, 252, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(192, 132, 252, 0.6);
+}
+
+/* ── Shine animation ── */
+@keyframes shine {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-shine {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shine 2s linear infinite;
+}
+
+/* ── Shimmer animation for AI thinking ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(192, 132, 252, 0.15) 50%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── Pulse glow ── */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(192, 132, 252, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(192, 132, 252, 0.5); }
+}
+
+.animate-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* ── Float animation ── */
+@keyframes float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-12px) scale(1.05); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ── Smooth fade-in ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* ── Slide up animation ── */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.6s ease-out forwards;
+}
+
+/* ── Scale in animation ── */
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.4s ease-out forwards;
+}
+
+/* ── Skeleton loader ── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shine 1.5s linear infinite;
+  border-radius: 0.5rem;
+}
+
+/* ── Rating stars ── */
+.star-filled {
+  color: #fbbf24;
+  fill: #fbbf24;
+}
+
+.star-empty {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Booking step indicator ── */
+.step-active {
+  background: linear-gradient(135deg, #c084fc, #a855f7);
+  color: white;
+  box-shadow: 0 0 20px rgba(192, 132, 252, 0.5);
+}
+
+.step-completed {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  color: white;
+}
+
+.step-inactive {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Input styles ── */
+.input-glamhub {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(192, 132, 252, 0.2);
+  color: #f5f0ff;
+  transition: all 0.3s ease;
+}
+
+.input-glamhub:focus {
+  outline: none;
+  border-color: rgba(192, 132, 252, 0.6);
+  box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.input-glamhub::placeholder {
+  color: rgba(160, 160, 176, 0.6);
+}
+
+/* ── Badge ── */
+.badge-verified {
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.2), rgba(16, 185, 129, 0.2));
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #34d399;
+}
+
+.badge-premium {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(217, 119, 6, 0.2));
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+}
+
+/* ── Noise texture overlay ── */
+.noise-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.06;
+}
+
+/* ── Mobile menu transition ── */
+.mobile-menu-enter {
+  animation: slideDown 0.3s ease forwards;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Booking success ── */
+@keyframes checkmark {
+  0% { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.checkmark-animate {
+  stroke-dasharray: 100;
+  animation: checkmark 0.6s ease-out forwards;
+}
+
+/* ── Carousel ── */
+.carousel-container {
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Selection highlight ── */
+.selected-card {
+  border-color: #c084fc !important;
+  background: rgba(192, 132, 252, 0.1) !important;
+  box-shadow: 0 0 0 2px rgba(192, 132, 252, 0.3), 0 8px 30px rgba(192, 132, 252, 0.15);
+}
+
+/* ── Time slot ── */
+.time-slot-available {
+  border: 1px solid rgba(192, 132, 252, 0.3);
+  color: #f5f0ff;
+  transition: all 0.2s ease;
+}
+
+.time-slot-available:hover {
+  border-color: #c084fc;
+  background: rgba(192, 132, 252, 0.1);
+}
+
+.time-slot-selected {
+  background: linear-gradient(135deg, #c084fc, #a855f7);
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+}
+
+.time-slot-unavailable {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* ── Hero slideshow styles ── */
+.hero-gradient-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 10, 15, 0.45) 0%,
+    rgba(22, 6, 39, 0.55) 50%,
+    #0a0a0f 100%
+  );
+  pointer-events: none;
+}
+
+@keyframes heroKenBurns {
+  0% { transform: scale(1) translateY(0); }
+  100% { transform: scale(1.06) translateY(-1.5%); }
+}
+
+.hero-kenburns {
+  animation: heroKenBurns 7s ease-in-out both;
+  will-change: transform;
+}
+
+/* Slightly tune slide transitions for smooth fades */
+.hero-slide {
+  transition: opacity 1s ease-in-out, transform 7s ease-in-out;
+}
+
+/* subtle vignette to add depth */
+.hero-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    80% 80% at 50% 50%,
+    transparent 20%,
+    rgba(10, 10, 15, 0.5) 70%,
+    rgba(10, 10, 15, 0.95) 100%
+  );
+  pointer-events: none;
+}
+
+/* Make hero images pop a bit more without changing assets */
+.hero-image-filter {
+  filter: contrast(1.07) saturate(1.12) brightness(1.02);
+  transition: filter 220ms ease;
+}
+
+/* Checkbox theming to match the dark UI */
+input[type="checkbox"] {
+  accent-color: #c084fc;
+  background-color: transparent;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+}
+
+/* ── QR Scanner scan-line animation ── */
+@keyframes scanLine {
+  0%   { top: 10%; opacity: 0.8; }
+  50%  { opacity: 1; }
+  100% { top: 90%; opacity: 0.8; }
+}
+
+.animate-scan-line {
+  position: absolute;
+  animation: scanLine 2s ease-in-out infinite alternate;
+}
+
+/* ── Notification type colours ── */
+.notif-booking_confirmed  { border-left: 3px solid #34d399; }
+.notif-booking_reminder   { border-left: 3px solid #fbbf24; }
+.notif-no_show_warning    { border-left: 3px solid #ef4444; }
+.notif-qr_verified        { border-left: 3px solid #a78bfa; }
+.notif-offer              { border-left: 3px solid #f472b6; }
+
+/* ── Cash badge ── */
+.badge-cash {
+  background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(16,185,129,0.15));
+  border: 1px solid rgba(52,211,153,0.35);
+  color: #34d399;
+}

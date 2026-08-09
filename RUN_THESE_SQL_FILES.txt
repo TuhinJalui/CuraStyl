@@ -1,0 +1,88 @@
+═══════════════════════════════════════════════════════════════
+   🔥 FIX PAYMENT ERROR - RUN THESE SQL FILES IN ORDER
+═══════════════════════════════════════════════════════════════
+
+IMPORTANT: You ran the WRONG files!
+
+❌ SIMPLE_VERIFY.sql - This only CHECKS (doesn't fix)
+❌ VERIFY_DATABASE_SETUP.sql - This only CHECKS (doesn't fix)
+
+✅ You need to run these to ACTUALLY FIX:
+
+═══════════════════════════════════════════════════════════════
+
+STEP 1: Open Supabase SQL Editor
+→ Go to: https://supabase.com/dashboard
+→ Select your project
+→ Click "SQL Editor" in left sidebar
+→ Click "New Query"
+
+═══════════════════════════════════════════════════════════════
+
+STEP 2: Run PAYMENTS_MIGRATION.sql
+→ Open in VS Code: supabase/PAYMENTS_MIGRATION.sql
+→ Copy EVERYTHING from that file
+→ Paste into Supabase SQL Editor
+→ Click "RUN" button
+→ Wait for success message
+
+Expected result: "Success. No rows returned" or similar
+
+═══════════════════════════════════════════════════════════════
+
+STEP 3: Run FIX_GLAMPOINTS_AND_PLANS.sql
+→ Open in VS Code: supabase/FIX_GLAMPOINTS_AND_PLANS.sql
+→ Copy EVERYTHING from that file
+→ Paste into Supabase SQL Editor
+→ Click "RUN" button
+→ Wait for success messages with ✅ marks
+
+Expected result: Multiple ✅ messages and "ALL FIXES APPLIED"
+
+═══════════════════════════════════════════════════════════════
+
+STEP 4: Test Again
+→ Go back to your app: http://localhost:3000/salon-owner/dashboard
+→ Click profile → My Plan
+→ Click "Upgrade" button
+→ Check browser console (F12)
+
+═══════════════════════════════════════════════════════════════
+
+WHAT TO SHARE IF STILL BROKEN:
+
+1. Check YOUR TERMINAL (where npm run dev is running)
+   Look for lines like:
+   [SalonPlan] ===== START =====
+   [SalonPlan] ===== UNEXPECTED ERROR =====
+   
+   Copy ALL those lines
+
+2. Check BROWSER CONSOLE (F12 → Console tab)
+   Look for lines like:
+   [SalonOwner] Upgrade error:
+   [PaymentOrder] Database error:
+   
+   Copy ALL those lines
+
+3. Share BOTH terminal logs and browser console logs
+
+═══════════════════════════════════════════════════════════════
+
+FILES IN THIS FOLDER:
+
+📄 PAYMENTS_MIGRATION.sql ← RUN THIS FIRST
+📄 FIX_GLAMPOINTS_AND_PLANS.sql ← RUN THIS SECOND
+
+📄 SIMPLE_VERIFY.sql ← Only for checking (you already ran)
+📄 VERIFY_DATABASE_SETUP.sql ← Only for checking (you already ran)
+
+═══════════════════════════════════════════════════════════════
+
+TL;DR:
+1. Run PAYMENTS_MIGRATION.sql in Supabase
+2. Run FIX_GLAMPOINTS_AND_PLANS.sql in Supabase
+3. Test upgrade button
+4. Share terminal logs if still broken
+
+═══════════════════════════════════════════════════════════════

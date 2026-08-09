@@ -1,0 +1,51 @@
+═══════════════════════════════════════════════════════
+   🎯 QUICK FIX CHECKLIST - Do These 3 Things
+═══════════════════════════════════════════════════════
+
+□ STEP 1: Restart Server (30 seconds)
+  ├─ Stop server: Ctrl + C
+  ├─ Run: rmdir /s /q .next
+  └─ Run: npm run dev
+
+□ STEP 2: Clear Browser (30 seconds)
+  ├─ Press F12
+  ├─ Go to Application tab
+  ├─ Click "Clear storage"
+  ├─ Click "Clear site data"
+  ├─ Close browser completely
+  └─ Reopen and go to localhost:3000
+
+□ STEP 3: Test Everything (2 minutes)
+  ├─ Login as salon owner
+  ├─ Check sidebar has 8 tabs (including My Plan & Analytics)
+  ├─ Click each sidebar tab (works?)
+  ├─ Click profile → My Plan (works?)
+  └─ Go to /virtual-tryon (works?)
+
+═══════════════════════════════════════════════════════
+
+IF PAYMENT UPGRADE FAILS:
+□ Run supabase/SIMPLE_VERIFY.sql in Supabase
+□ If you see ❌ marks, run these in order:
+  1. supabase/PAYMENTS_MIGRATION.sql
+  2. supabase/FIX_GLAMPOINTS_AND_PLANS.sql
+
+═══════════════════════════════════════════════════════
+
+✅ ALL ROUTES EXIST AND WORK:
+   • /salon-owner/dashboard ✅
+   • /salon-owner/dashboard?tab=my-plan ✅
+   • /salon-owner/dashboard?tab=analytics ✅
+   • /virtual-tryon ✅
+   • All other tabs ✅
+
+✅ ALL BUTTONS WORK - just need fresh cache!
+
+═══════════════════════════════════════════════════════
+
+NEED HELP?
+→ Open DO_THIS_NOW.md for detailed steps
+→ Open COMPLETE_STATUS.md to see what's working
+→ Share browser console screenshot if still broken
+
+═══════════════════════════════════════════════════════

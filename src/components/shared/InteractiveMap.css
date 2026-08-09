@@ -1,0 +1,26 @@
+/* Custom marker styles for Leaflet */
+.custom-marker {
+  background: none;
+  border: none;
+  cursor: grab;
+}
+
+.custom-marker:active {
+  cursor: grabbing;
+}
+
+/* Ensure Leaflet controls are visible */
+.leaflet-control-zoom {
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(26, 10, 46, 0.9) !important;
+}
+
+.leaflet-control-zoom a {
+  background-color: rgba(26, 10, 46, 0.9) !important;
+  color: rgba(168, 85, 247, 1) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background-color: rgba(168, 85, 247, 0.2) !important;
+}
